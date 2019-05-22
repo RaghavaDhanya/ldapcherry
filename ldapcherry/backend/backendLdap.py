@@ -444,6 +444,7 @@ class Backend(ldapcherry.backend.Backend):
             self._byte_p2(self.userdn)
         # gen the ldif first add_s and add the user
         ldif = modlist.addModlist(attrs_srt)
+        print("attr while adding user"+str(ldif))
         try:
             ldap_client.add_s(dn, ldif)
         except ldap.ALREADY_EXISTS as e:
@@ -480,13 +481,27 @@ class Backend(ldapcherry.backend.Backend):
             new = {battr: self._modlist(self._byte_p3(bcontent))}
             # if attr is dn entry, use rename
             if attr.lower() == self.dn_user_attr.lower():
-                ldap_client.rename_s(
-                    dn,
-                    ldap.dn.dn2str([[(battr, bcontent, 1)]])
+                if type(old_attrs[attr]) is list:
+                    tmp = []
+                    for value in old_attrs[attr]:
+                        tmp.append(self._byte_p3(value))
+                    bold_value = tmp
+                else:
+                    bold_value = self._modlist(
+                        self._byte_p3(old_attrs[attr])
                     )
-                dn = ldap.dn.dn2str(
-                    [[(battr, bcontent, 1)]] + ldap.dn.str2dn(dn)[1:]
-                    )
+                old = {battr: bold_value}
+                if(old != new):
+                    ldap_client.rename_s(
+                        dn,
+                        ldap.dn.dn2str([[(battr, bcontent, 1)]])
+                        )
+                    dn = ldap.dn.dn2str(
+                        [[(battr, bcontent, 1)]] + ldap.dn.str2dn(dn)[1:]
+                        )
+            elif attr == "userPassword":
+                ldap_client.modify_s(dn,[(ldap.MOD_REPLACE,attr,[self._byte_p3(bcontent)])])
+
             else:
                 # if attr is already set, replace the value
                 # (see dict old passed to modifyModlist)
@@ -494,7 +509,7 @@ class Backend(ldapcherry.backend.Backend):
                     if type(old_attrs[attr]) is list:
                         tmp = []
                         for value in old_attrs[attr]:
-                            tmp.append(self._byte_p2(value))
+                            tmp.append(self._byte_p3(value))
                         bold_value = tmp
                     else:
                         bold_value = self._modlist(
@@ -505,7 +520,7 @@ class Backend(ldapcherry.backend.Backend):
                 else:
                     old = {}
                 ldif = modlist.modifyModlist(old, new)
-                if ldif:
+                if ldif and old != new:
                     try:
                         ldap_client.modify_s(dn, ldif)
                     except Exception as e:
